@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "沉浸式音乐播放器，融合天气电台、歌词舞台、粒子视觉和 3D 歌单架。",
   "author": "Mineradio",
   "main": "desktop/main.js",
@@ -13,7 +13,9 @@
     "build:mac": "electron-builder --mac dmg zip",
     "build:mac:dir": "electron-builder --mac dir",
     "build:mac:arm64": "electron-builder --mac dmg zip --arm64",
-    "build:mac:x64": "electron-builder --mac dmg zip --x64"
+    "build:mac:x64": "electron-builder --mac dmg zip --x64",
+    "release:tag-from-version": "node scripts/release-tag-from-version.js",
+    "setup:githooks": "git config core.hooksPath .githooks"
   },
   "build": {
     "appId": "com.mineradio.desktop",
@@ -24,7 +26,7 @@
     },
     "afterPack": "build/after-pack.js",
     "toolsets": {
-      "winCodeSign": "1.1.0"
+      "winCodeSign": "1.1.1"
     },
     "files": [
       "desktop/**/*",
