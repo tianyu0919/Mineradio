@@ -9,7 +9,11 @@
   "scripts": {
     "start": "electron .",
     "build:win": "electron-builder --win nsis",
-    "build:win:dir": "electron-builder --win dir"
+    "build:win:dir": "electron-builder --win dir",
+    "build:mac": "electron-builder --mac dmg zip",
+    "build:mac:dir": "electron-builder --mac dir",
+    "build:mac:arm64": "electron-builder --mac dmg zip --arm64",
+    "build:mac:x64": "electron-builder --mac dmg zip --x64"
   },
   "build": {
     "appId": "com.mineradio.desktop",
@@ -46,6 +50,16 @@
         }
       ]
     },
+    "mac": {
+      "category": "public.app-category.music",
+      "darkModeSupport": true,
+      "icon": "build/icon.icns",
+      "artifactName": "Mineradio-${version}-${arch}.${ext}",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -64,7 +78,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "XxHuberrr",
+        "owner": "tianyu0919",
         "repo": "Mineradio"
       }
     ]
@@ -72,7 +86,7 @@
   "mineradio": {
     "update": {
       "provider": "github",
-      "owner": "XxHuberrr",
+      "owner": "tianyu0919",
       "repo": "Mineradio",
       "preview": true,
       "preferMirrors": true,

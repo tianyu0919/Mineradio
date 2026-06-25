@@ -368,10 +368,62 @@ function extractReleaseNotes(body) {
   });
   return notes.slice(0, 4);
 }
+function currentUpdatePlatform() {
+  if (process.platform === 'darwin') return 'mac';
+  if (process.platform === 'win32') return 'win';
+  return 'other';
+}
+function currentUpdateArch() {
+  if (process.arch === 'arm64') return 'arm64';
+  if (process.arch === 'x64') return 'x64';
+  return '';
+}
+function preferredAssetPatterns() {
+  const platform = currentUpdatePlatform();
+  if (platform === 'mac') {
+    return [/\.(dmg)$/i, /\.(zip)$/i, /\.(pkg)$/i];
+  }
+  if (platform === 'win') {
+    return [/\.(exe|msi)$/i, /\.(zip|7z)$/i];
+  }
+  return [/\.(AppImage|deb|rpm|tar\.gz|zip)$/i, /\.(zip|7z)$/i];
+}
+function preferredAssetArchPatterns() {
+  const arch = currentUpdateArch();
+  const platform = currentUpdatePlatform();
+  if (platform === 'mac') {
+    if (arch === 'arm64') return [/\buniversal\b/i, /\barm64\b|\baarch64\b/i, /\bx64\b|\bintel\b/i];
+    if (arch === 'x64') return [/\buniversal\b/i, /\bx64\b|\bintel\b/i, /\barm64\b|\baarch64\b/i];
+  }
+  if (platform === 'win') {
+    if (arch === 'arm64') return [/\barm64\b/i, /\bx64\b/i];
+    if (arch === 'x64') return [/\bx64\b/i, /\barm64\b/i];
+  }
+  return [];
+}
+function defaultReleaseAssetName(version) {
+  const normalized = normalizeVersion(version || APP_VERSION) || APP_VERSION;
+  if (currentUpdatePlatform() === 'mac') return `Mineradio-${normalized}-${currentUpdateArch() || 'arm64'}.dmg`;
+  return `Mineradio-${normalized}-Setup.exe`;
+}
+function preferredLatestManifestNames() {
+  if (currentUpdatePlatform() === 'mac') return ['latest-mac.yml', 'latest.yml'];
+  return ['latest.yml', 'latest-mac.yml'];
+}
 function pickReleaseAsset(assets) {
   const list = Array.isArray(assets) ? assets : [];
-  const preferred = list.find(a => /\.(exe|msi)$/i.test(a && a.name || ''))
-    || list.find(a => /\.(zip|7z)$/i.test(a && a.name || ''))
+  const patterns = preferredAssetPatterns();
+  const archPatterns = preferredAssetArchPatterns();
+  const preferred = patterns.reduce((hit, pattern) => {
+    if (hit) return hit;
+    const matched = list.filter(a => pattern.test(a && a.name || ''));
+    if (!matched.length) return null;
+    if (!archPatterns.length) return matched[0];
+    return archPatterns.reduce((archHit, archPattern) => {
+      if (archHit) return archHit;
+      return matched.find(a => archPattern.test(a && a.name || '')) || null;
+    }, null) || matched[0];
+  }, null)
     || list[0];
   if (!preferred) return null;
   const digest = assetDigestInfo(preferred);
@@ -459,7 +511,7 @@ function normalizeManifestUpdateInfo(data) {
     ? release.notes.slice(0, 4).map(cleanReleaseLine).filter(Boolean)
     : (extractReleaseNotes(release.body || data.body).length ? extractReleaseNotes(release.body || data.body) : UPDATE_FALLBACK_NOTES);
   const assetInfo = downloadUrl ? {
-    name: asset.name || updateAssetNameFromUrl(downloadUrl) || `Mineradio-${latestVersion}-Setup.exe`,
+    name: asset.name || updateAssetNameFromUrl(downloadUrl) || defaultReleaseAssetName(latestVersion),
     size: Number(asset.size || 0) || 0,
     contentType: asset.contentType || asset.content_type || '',
     downloadUrl,
@@ -674,7 +726,7 @@ function githubReleaseDownloadUrl(version, fileName) {
 }
 function parseLatestYmlUpdateInfo(text, reason) {
   const latestVersion = normalizeVersion(yamlScalar(text, 'version') || APP_VERSION) || APP_VERSION;
-  const assetPath = yamlScalar(text, 'path') || yamlScalar(text, 'url') || `Mineradio-${latestVersion}-Setup.exe`;
+  const assetPath = yamlScalar(text, 'path') || yamlScalar(text, 'url') || defaultReleaseAssetName(latestVersion);
   const sha512 = normalizeDigest(yamlScalar(text, 'sha512'), 'sha512');
   const size = Number(yamlScalar(text, 'size') || 0) || 0;
   const releaseDate = yamlScalar(text, 'releaseDate');
@@ -714,9 +766,11 @@ function parseLatestYmlUpdateInfo(text, reason) {
 }
 async function fetchLatestYmlUpdateInfo(reason) {
   if (!UPDATE_CONFIG.configured || UPDATE_CONFIG.provider !== 'github') throw updateError('UPDATE_REPOSITORY_NOT_CONFIGURED');
-  const latestYmlUrl = `https://github.com/${encodeURIComponent(UPDATE_CONFIG.owner)}/${encodeURIComponent(UPDATE_CONFIG.repo)}/releases/latest/download/latest.yml`;
-  const candidates = uniqueDownloadCandidates(latestYmlUrl);
-  const result = await fetchTextFromCandidates(candidates, 6500);
+  const latestCandidates = preferredLatestManifestNames().flatMap(name => {
+    const url = `https://github.com/${encodeURIComponent(UPDATE_CONFIG.owner)}/${encodeURIComponent(UPDATE_CONFIG.repo)}/releases/latest/download/${name}`;
+    return uniqueDownloadCandidates(url);
+  });
+  const result = await fetchTextFromCandidates(latestCandidates, 6500);
   return parseLatestYmlUpdateInfo(result.text, reason);
 }
 async function fetchLatestUpdateInfo() {
